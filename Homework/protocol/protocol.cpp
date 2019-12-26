@@ -1,13 +1,14 @@
 #include "rip.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 /*
   在头文件 rip.h 中定义了如下的结构体：
   #define RIP_MAX_ENTRY 25
   typedef struct {
     // all fields are big endian
-    // we don't store 'family', as it is always 2(for response) and 0(for request)
+    // we don't store 'family', as it is always 2(response) and 0(request)
     // we don't store 'tag', as it is always 0
     uint32_t addr;
     uint32_t mask;
@@ -39,121 +40,93 @@
  * IP 包的 Total Length 长度可能和 len 不同，当 Total Length 大于 len 时，把传入的 IP 包视为不合法。
  * 你不需要校验 IP 头和 UDP 的校验和是否合法。
  * 你需要检查 Command 是否为 1 或 2，Version 是否为 2， Zero 是否为 0，
- * Family 和 Command 是否有正确的对应关系（见上面结构体注释），Tag 是否为 0，
+ * Family 和 Command 是否有正确的对应关系，Tag 是否为 0，
  * Metric 转换成小端序后是否在 [1,16] 的区间内，
  * Mask 的二进制是不是连续的 1 与连续的 0 组成等等。
  */
-bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) 
+bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output)
 {
-  // TODO:
+  uint8_t fir_len = packet[0] & 0x0F;
+  int head_len = fir_len * 4;
+  uint32_t tot_len = (uint32_t)packet[3]+(uint32_t)(packet[2]<<8);
 
-  uint32_t  con_len = (packet[2] << 8) + (packet[2 + 1]);
-  if (con_len > len) return false;
+  if (tot_len > len) return false;
 
-  uint16_t header_len = (packet[0]&0x0F) << 2; // length * 4;
-  uint8_t UDP_HDR_len = 8;
-  uint16_t  rip_len =  header_len + UDP_HDR_len;
+  if ( packet[head_len + 8] != 2 && packet[head_len + 8] != 1) return false;
+  output->command = packet[head_len + 8];
+  if (packet[head_len + 9] != 2) return false;
 
-  // if rip packet length > 25 entries, false;
-  if (con_len - rip_len > RIP_MAX_ENTRY * 20) return false;
+  if (packet[head_len + 10] != 0 || packet[head_len + 11] != 0) return false;
 
-  uint16_t rip_com_len = rip_len;
-  uint8_t command  = packet[rip_com_len];
-  if (command != 1 && command != 2) return false;
-  (*output).command = command;
+  int nums = (tot_len - 32) / 20;
+  uint8_t token = packet[head_len + 8];
+  int len_out = head_len + 12;
 
-  //check version
-  uint16_t rip_ver_len = rip_com_len + 1;
-  uint8_t version =  packet[rip_ver_len];
-  if (version != 2) return false;
-
-  //check zero
-  uint16_t rip_zero_len = rip_ver_len + 1;
-  uint16_t zero = (packet[rip_zero_len] << 8) + packet[rip_zero_len + 1];
-  if (zero != 0) return false;
-
-  RipEntry tmpEntry;
-  uint16_t family = 0;
-  uint16_t tag = 0;
-  uint32_t metric = 0;
-
-uint8_t rip_ip_family_len = 0,
-                rip_ip_tag_len = 2,
-                rip_ip_addr_len = 4,
-                rip_ip_mask_len = 8,
-                rip_ip_next_len = 12,
-                rip_ip_metric_len = 16;
-  
-  (*output).numEntries = 0;
-  for (uint16_t rip_ip_len  = rip_zero_len+2; rip_ip_len < len; rip_ip_len += 20)
+  for (int i = 0; i < nums; ++i)
   {
-      int pos = 0;
-      pos = rip_ip_len + rip_ip_family_len;
-      family = (packet[pos] << 8) +  (packet[pos + 1]);
-      if (!(family == 2 && command == 2) && !(family == 0 && command == 1)) return false; // check family
-
-      pos = rip_ip_len +  rip_ip_tag_len;
-      tag = (packet[pos] << 8) + (packet[pos + 1]);
-      if (tag != 0) return false;
-
-      pos = rip_ip_len + rip_ip_metric_len;
-      for (int i = 0; i < 4; ++i) metric += (packet[pos+i] << ((3-i)*8));
-      if (!(metric >= 1u && metric <= 16u)) return false;
-
-      uint32_t tt = 0;
-      for (int i = 0; i < 4; ++i) tt += (packet[pos+i] << (i*8));
-      tmpEntry.metric = tt;
-
-      tt = 0;
-      pos = rip_ip_len + rip_ip_mask_len;
-      for (int  i = 0; i < 4; ++i) tt += (packet[pos+i] << (i*8));
-       tmpEntry.mask = tt;
-      // tmpEntry.mask = (packet[pos])
-      //      + (packet[pos + 1] << 8)
-      //      + (packet[pos + 2] << 16)
-      //      + (packet[pos + 3] << 24);
-
-      for (int j = 0, flag = 0; j < 32; ++j){
-      if (!flag){
-        if (tmpEntry.mask & (1u << j)) continue;
-            else
-                flag = 1;
-      } else{
-        if (tmpEntry.mask & (1u << j)){
-          return false;
-        } else{
-          continue;
-        }
-      }
-    }
-
-    tt = 0;
-    pos = rip_ip_len + rip_ip_addr_len;
-    for (int  i = 0; i < 4; ++i) tt += (packet[pos+i] << (i*8));
-    tmpEntry.addr = tt;
-    //  tmpEntry.addr = (packet[pos])
-    //     + (packet[pos + 1] << 8)
-    //     + (packet[pos + 2] << 16)
-    //     + (packet[pos + 3] << 24);
-
-    tt = 0;
-    pos = rip_ip_len + rip_ip_next_len;
-    for (int  i = 0; i < 4; ++i) tt += (packet[pos+i] << (i*8));
-    tmpEntry.nexthop = tt;
-      // tmpEntry.nexthop = (packet[pos])
-      //   + (packet[pos + 1] << 8)
-      //   + (packet[pos + 2] << 16)
-      //   + (packet[pos + 3] << 24);
-
-    (*output).entries[(*output).numEntries++] = tmpEntry;
+    if (token == 1 && (packet[len_out]!=0 || packet[len_out + 1]!=0)) return false;
+    if (token == 2 && (packet[len_out]!=0 || packet[len_out + 1]!=2)) return false;
+    
+    for( int j = len_out + 8; j < len_out + 12; j ++){
+      if(packet[j] != 0xFF && packet[j] != 0) return false;
   }
+    
+    if (packet[len_out + 16] != 0 || packet[len_out + 17] != 0 || packet[len_out + 18] != 0 || (packet[len_out + 19] == 0 || packet[len_out + 19] > 16))
+      return false;
+    len_out = len_out + 20;
+  }
+  output->numEntries = nums;
+  output->command = token;
 
+
+  uint32_t rip_addr = 0;
+  uint32_t rip_mask = 0;
+  uint32_t rip_nexthop = 0;
+  uint32_t rip_metrics = 0;
+  uint32_t rip_addr_family = 0;
+  len_out = head_len + 12;
+  for (int i = 0; i < nums;  ++i)
+  {
+    rip_addr_family = 0;
+    rip_addr = 0;
+    rip_mask = 0;
+    rip_nexthop = 0;
+    rip_metrics = 0;
+
+    rip_addr += ((uint32_t)packet[len_out + 7]) << 24;
+    rip_addr += ((uint32_t)packet[len_out + 6]) << 16;
+    rip_addr += ((uint32_t)packet[len_out + 5]) << 8;
+    rip_addr += ((uint32_t)packet[len_out + 4]);
+
+    rip_mask += ((uint32_t)packet[len_out + 11]) << 24;
+    rip_mask += ((uint32_t)packet[len_out + 10]) << 16;
+    rip_mask += ((uint32_t)packet[len_out + 9]) << 8;
+    rip_mask += ((uint32_t)packet[len_out + 8]);
+
+    rip_nexthop += ((uint32_t)packet[len_out + 15]) << 24;
+    rip_nexthop += ((uint32_t)packet[len_out + 14]) << 16;
+    rip_nexthop += ((uint32_t)packet[len_out + 13]) << 8;
+    rip_nexthop += ((uint32_t)packet[len_out + 12]);
+
+    rip_metrics = ((uint32_t)packet[len_out + 19])<<24;
+
+    rip_addr_family += ((uint32_t)packet[len_out + 0])<<8;
+    rip_addr_family += ((uint32_t)packet[len_out + 1]);
+
+    output->entries[i].addr = rip_addr;
+    output->entries[i].mask = rip_mask;
+    output->entries[i].nexthop = rip_nexthop;
+    output->entries[i].metric = rip_metrics;
+    output->entries[i].addr_family = rip_addr_family;
+
+    len_out = len_out + 20;
+  }
   return true;
 }
 
 /**
  * @brief 从 RipPacket 的数据结构构造出 RIP 协议的二进制格式
- * @param rip 一个 RipPacket 结构体dsadadasd
+ * @param rip 一个 RipPacket 结构体
  * @param buffer 一个足够大的缓冲区，你要把 RIP 协议的数据写进去
  * @return 写入 buffer 的数据长度
  * 
@@ -163,7 +136,7 @@ uint8_t rip_ip_family_len = 0,
  */
 uint32_t assemble(const RipPacket *rip, uint8_t *buffer) 
 {
-  // TODO:
+   // TODO:
   uint8_t rip_ip_family_len = 0,
                 rip_ip_tag_len = 2,
                 rip_ip_addr_len = 4,

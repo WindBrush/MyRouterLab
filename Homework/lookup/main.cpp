@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
     if (buffer[0] == 'I') {
       sscanf(buffer, "%c,%x,%d,%d,%x", &tmp, &addr, &len, &if_index, &nexthop);
       RoutingTableEntry entry = {
-          .addr = addr, .len = len, .if_index = if_index, .nexthop = nexthop};
+          .addr = addr, .len = len, .if_index = if_index, .nexthop = nexthop, .metric = 1};
       update(true, entry);
     } else if (buffer[0] == 'D') {
       sscanf(buffer, "%c,%x,%d", &tmp, &addr, &len);
@@ -23,7 +23,8 @@ int main(int argc, char *argv[]) {
         .addr = addr,
         .len = len,
         .if_index = 0,
-        .nexthop = 0
+        .nexthop = 0,
+        .metric = 1
       };
       update(false, entry);
     } else if (buffer[0] == 'Q') {

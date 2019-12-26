@@ -21,22 +21,6 @@ extern uint32_t assemble(const RipPacket *rip, uint8_t *buffer);
 
 extern std::map<std::pair<uint32_t, uint32_t>, RoutingTableEntry> rtMap; 
 
-void printRouterTable()
-{
-  printf("/*----------------------------------  Routing Table  ---------------------------------*/\n");
-  for (std::map<std::pair<uint32_t, uint32_t>, RoutingTableEntry>::iterator it = rtMap.begin();  it != rtMap.end();  it++) 
-  {
-    printf("==========================\n");
-     RoutingTableEntry tmp  = it->second;
-     printf("IPV4 addr:  %u.%u.%u.%u/%u\n",(uint8_t)(tmp.addr),(uint8_t)(tmp. addr >> 8),  (uint8_t)(tmp.addr >> 16), (uint8_t)(tmp.addr >> 24), tmp.len);
-     printf("if_index:  %u\n",tmp.if_index);
-     printf("nexthop:  %u.%u.%u.%u\n", (uint8_t)(tmp.nexthop), (uint8_t)(tmp.nexthop >> 8), (uint8_t)(tmp.nexthop >> 16), (uint8_t)(tmp.nexthop >> 24));
-     printf("metric:  %u\n",tmp.metric);
-    printf("==========================\n");
-  }
-  printf("/*----------------------------------------------------------------------------------------*/\n");
-}
-
 uint32_t converEndian(uint32_t val) {
   return ( (val & 0x000000FF) << 24) | ((val & 0x0000FF00) << 8) | ((val & 0x00FF0000) >> 8) | ((val & 0xFF000000) >> 24);
 }
@@ -47,6 +31,25 @@ uint32_t lenToMask(uint32_t len) {
 
 uint32_t checkIpAddr(uint32_t len, uint32_t addre) {
   return lenToMask(len) & addre;
+}
+
+void printRouterTable()
+{
+ //printf("This is the router to be print\n");
+  printf("/*================================ Routing Table  ====================================*/\n");
+  for (std::map<std::pair<uint32_t, uint32_t>, RoutingTableEntry>::iterator it = rtMap.begin();  it != rtMap.end();  it++) 
+  {
+     RoutingTableEntry tmp  = it->second;
+     //printf("addr: %x , len: %u , if_index: %u , nexthop: %x , metric: %u\n", tmp.addr, tmp.len, tmp.if_index, tmp.nexthop, converEndian(tmp.metric));
+    printf("----------------------------------------------\n");
+     //printf("addr : %x \n", tmp.addr);
+     printf("IPV4 addr:  %u.%u.%u.%u/%u\n",(uint8_t)(tmp.addr),(uint8_t)(tmp. addr >> 8),  (uint8_t)(tmp.addr >> 16), (uint8_t)(tmp.addr >> 24), tmp.len);
+     printf("if_index:  %u\n",tmp.if_index);
+     printf("nexthop:  %u.%u.%u.%u\n", (uint8_t)(tmp.nexthop), (uint8_t)(tmp.nexthop >> 8), (uint8_t)(tmp.nexthop >> 16), (uint8_t)(tmp.nexthop >> 24));
+     printf("metric:  %u\n",converEndian(tmp.metric));
+    printf("-----------------------------------------------\n");
+  }
+  printf("/*=================================================================================*/\n");
 }
 
 uint8_t packet[2048];
@@ -119,7 +122,7 @@ int main(int argc, char *argv[]) {
   // 10.0.3.0/24 if 3
   for (uint32_t i = 0; i < N_IFACE_ON_BOARD; i++) {
     RoutingTableEntry entry = {
-        .addr = addrs[i] & 0x00FFFFFF, // big endian
+        .addr = addrs[i] & 0xFFFFFFFF, // big endian
         .len = 24,        // small endian
         .if_index = i,    // small endian
         .nexthop = 0,      // big endian, means direct
@@ -213,16 +216,18 @@ int main(int argc, char *argv[]) {
     in_addr_t src_addr, dst_addr;
     // TODO: extract src_addr and dst_addr from packet (big endian)
     src_addr = 0;
-    for (int i = 15; i >= 12; --i) {
+    for (int i = 15; i >= 13; --i) {
       src_addr += packet[i]; 
       src_addr <<= 8;
     }
+    src_addr += packet[12];
 
     dst_addr = 0;
-    for (int i = 19; i >= 16; --i) {
+    for (int i = 19; i >= 17; --i) {
       dst_addr += packet[i]; 
       dst_addr <<= 8;
     }
+    dst_addr += packet[16];
 
     // 2. check whether dst is me
     printf("Received Address: SRC: %x   DST:  %x\n",src_addr, dst_addr);
@@ -235,6 +240,7 @@ int main(int argc, char *argv[]) {
         break;
       }
        if (memcmp(&dst_addr, &group_addr, sizeof(in_addr_t)) == 0) {
+         //printf("IS ME!!!\n");
         dst_is_me = true;
         break;
       }
@@ -245,7 +251,9 @@ int main(int argc, char *argv[]) {
       // 3a.1
       RipPacket rip;
       // check and validate
+      
       if (disassemble(packet, res, &rip)) {
+        //printf("WTFFFFFFFFFFFFFFFFFFFFFFFFFF: %u\n", rip.command);
         if (rip.command == 1) {
           // 3a.3 request, ref. RFC2453 Section 3.9.1
           // only need to respond to whole table requests in the lab
@@ -319,6 +327,7 @@ int main(int argc, char *argv[]) {
           // HINT: what is missing from RoutingTableEntry?
           // you might want to use `query` and `update` but beware of the difference between exact match and longest prefix match
           // optional: triggered updates? ref. RFC2453 3.10.1
+          //printf("FOR UPDATE\n");
            RipPacket resp;
           bool flag = false; // if update
           resp.command = 2; resp.numEntries = 0;
@@ -327,12 +336,12 @@ int main(int argc, char *argv[]) {
             uint32_t curMetric = rip.entries[i].metric;
 			      uint32_t curAddr = rip.entries[i].addr;
 			      uint32_t curMask = rip.entries[i].mask;
-			      uint32_t curLen = __builtin_popcount(mask);
+			      uint32_t curLen = __builtin_popcount(curMask);
 			      uint32_t curNexthop = rip.entries[i].nexthop;
             if (curNexthop == 0) curNexthop = src_addr;
             curMetric = converEndian(curMetric);
             curMetric = std::min(curMetric + 1, 16u);
-
+           // printf("Metricccccccccccccccccccccccccccc:        %u\n",curMetric);
             bool isfound = false;
             for (std::map<std::pair<uint32_t, uint32_t>, RoutingTableEntry>::iterator it = rtMap.begin();  it != rtMap.end();  it++)
             {
@@ -342,7 +351,9 @@ int main(int argc, char *argv[]) {
                 if (checkIpAddr(e.len, e.addr) == (lenToMask(curLen) & curAddr) ) 
                 {
                   isfound = true;
-                  if (curMetric >= 16u && curNexthop == e.nexthop) { // Del
+                  //printf("Diff thop: %x %x\n",curNexthop, e.nexthop);
+                  if (curMetric >= 16 && curNexthop == e.nexthop) { // Del
+                  //printf("DELLLLLLLLLLLLLLLLLLLLLLLLLLL\n");
                     RoutingTableEntry tmpDel;
                     tmpDel.addr = curAddr;
                     tmpDel.len = curLen;
@@ -362,7 +373,7 @@ int main(int argc, char *argv[]) {
                 }
               } // end if curLen == e.len
             } // end for rtMap
-            if (!isfound && curMetric < 16u)
+            if (!isfound && curMetric < 16)
             {
               flag = true;
               RoutingTableEntry tmpUp;
@@ -379,7 +390,7 @@ int main(int argc, char *argv[]) {
 
           if (flag)
           {
-            printf("RoutingTable Updated!");
+            printf("RoutingTable Updated.\n");
             output[0] = 0x45;
             output[1] = 0x00;
             output[4] = 0x00;
@@ -411,6 +422,7 @@ int main(int argc, char *argv[]) {
                     sendPkt.entries[sendPkt.numEntries].mask = mask_len;
                     sendPkt.entries[sendPkt.numEntries].metric = e.metric;
                     sendPkt.entries[sendPkt.numEntries].nexthop = e.nexthop;
+                   // printf("nexthop %x\n",e.nexthop);
                     sendPkt.numEntries ++;
                   }
               } // end for rtMap
