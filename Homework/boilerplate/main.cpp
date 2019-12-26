@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
   while (1) {
     uint64_t time = HAL_GetTicks();
     // when testing, you can change 30s to 5s
-    if (time > last_time + 5 * 1000) {
+    if (time > last_time + 15 * 1000) {
       // TODO: send complete routing table to every interface
       // ref. RFC2453 Section 3.8
       // multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
@@ -388,7 +388,7 @@ int main(int argc, char *argv[]) {
 
           //printRouterTable();
 
-          if (flag)
+          /*if (flag)
           {
             //printf("RoutingTable Updated.\n");
             output[0] = 0x45;
@@ -449,7 +449,8 @@ int main(int argc, char *argv[]) {
                 else
                   printf("WRONG! DST_MAC NOT FOUND!");
             } // end for N_IFACE_ON_BOARD
-          } // end if flag
+          } // end if flag 
+          */
             //printRouterTable();
         }
       }
