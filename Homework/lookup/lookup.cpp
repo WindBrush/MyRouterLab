@@ -40,10 +40,7 @@ std::map<std::pair<uint32_t, uint32_t>, RoutingTableEntry> rtMap;
  */
 void update(bool insert, RoutingTableEntry entry) {
   // TODO:
-  if (insert) { 
-    //printf("FUCKKKKKKKKKKKKKKK: %x\n", entry.addr);
-    rtMap.emplace(std::make_pair(entry.addr, entry.len), entry);
-  }
+  if (insert) rtMap.emplace(std::make_pair(entry.addr, entry.len), entry);
     else rtMap.erase(std::make_pair(entry.addr, entry.len));
 }
 
