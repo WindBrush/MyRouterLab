@@ -11,7 +11,7 @@ typedef struct {
   uint32_t addr_family;
 } RipEntry;
 
-typedef struct {// Das ist gut!
+typedef struct {
   uint32_t numEntries;
   // all fields below are big endian
   uint8_t command;
@@ -19,4 +19,4 @@ typedef struct {// Das ist gut!
   // we don't store 'zero', as it is always 0
   RipEntry entries[RIP_MAX_ENTRY];
 } RipPacket;
-//多行不E必自闭
+

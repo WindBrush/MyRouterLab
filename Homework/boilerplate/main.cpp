@@ -36,30 +36,30 @@ uint32_t checkIpAddr(uint32_t len, uint32_t addre) {
 void printRouterTable()
 {
  //printf("This is the router to be print\n");
-  printf("/*================================ Routing Table  ====================================*/\n");
+  printf("/*===================== Routing Table  =================*/\n");
   for (std::map<std::pair<uint32_t, uint32_t>, RoutingTableEntry>::iterator it = rtMap.begin();  it != rtMap.end();  it++) 
   {
      RoutingTableEntry tmp  = it->second;
      //printf("addr: %x , len: %u , if_index: %u , nexthop: %x , metric: %u\n", tmp.addr, tmp.len, tmp.if_index, tmp.nexthop, converEndian(tmp.metric));
-    printf("----------------------------------------------\n");
+    printf("----------------------------------------\n");
      //printf("addr : %x \n", tmp.addr);
      printf("IPV4 addr:  %u.%u.%u.%u/%u\n",(uint8_t)(tmp.addr),(uint8_t)(tmp. addr >> 8),  (uint8_t)(tmp.addr >> 16), (uint8_t)(tmp.addr >> 24), tmp.len);
      printf("if_index:  %u\n",tmp.if_index);
      printf("nexthop:  %u.%u.%u.%u\n", (uint8_t)(tmp.nexthop), (uint8_t)(tmp.nexthop >> 8), (uint8_t)(tmp.nexthop >> 16), (uint8_t)(tmp.nexthop >> 24));
      printf("metric:  %u\n",converEndian(tmp.metric));
-    printf("-----------------------------------------------\n");
+    printf("----------------------------------------\n");
   }
-  printf("/*=================================================================================*/\n");
+  printf("/*======================================================*/\n");
 }
 
 uint8_t packet[2048];
 uint8_t output[2048];
-// 0: 192.168.3.2
-// 1: 192.168.4.1
+// 0: 192.168.4.2
+// 1: 192.168.5.2
 // 2: 10.0.2.1
 // 3: 10.0.3.1
 // 你可以按需进行修改，注意端序
-in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0203a8c0, 0x0104a8c0, 0x0102000a, 0x0103000a};
+in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0101a8c0, 0x0103a8c0, 0x0102000a, 0x0103000a};
 
   /**
    * 代码中在发送 RIP 包的时候，会涉及到 IP 头的构造，由于不需要用各种高级特性，
@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
   while (1) {
     uint64_t time = HAL_GetTicks();
     // when testing, you can change 30s to 5s
-    if (time > last_time + 30 * 1000) {
+    if (time > last_time + 5 * 1000) {
       // TODO: send complete routing table to every interface
       // ref. RFC2453 Section 3.8
       // multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
           } 
           else printf("Error: Dest_Mac is not found!");
       } // end for N_IFACE
-      printf("30s Timer\n");
+      printf("5s Timer\n");
       // TODO: print complete routing table to stdout/stderr
       last_time = time;
     }
@@ -230,7 +230,7 @@ int main(int argc, char *argv[]) {
     dst_addr += packet[16];
 
     // 2. check whether dst is me
-    printf("Received Address: SRC: %x   DST:  %x\n",src_addr, dst_addr);
+    //printf("Received Address: SRC: %x   DST:  %x\n",src_addr, dst_addr);
 
     in_addr_t group_addr = BROADCAST_ADDR;
     bool dst_is_me = false;
@@ -279,7 +279,7 @@ int main(int argc, char *argv[]) {
             }
            } // end for rtMap
 
-            printRouterTable();
+           // printRouterTable();
 
             
           // TODO: fill IP headers
@@ -366,7 +366,7 @@ int main(int argc, char *argv[]) {
                     flag = true;
                     it->second.addr = curAddr;
                     it->second.metric = converEndian(curMetric);
-                    it->second.nexthop = curNexthop;
+                    it->second.nexthop = src_addr;
                     it->second.if_index = if_index;
                   }
                   break;
@@ -381,16 +381,16 @@ int main(int argc, char *argv[]) {
               tmpUp.len = curLen;
               tmpUp.metric = converEndian(curMetric);
               tmpUp.if_index = if_index;
-              tmpUp.nexthop = curNexthop;
+              tmpUp.nexthop = src_addr;
               update(true, tmpUp);
             }
           } // end for rip.numEntries
 
-          printRouterTable();
+          //printRouterTable();
 
           if (flag)
           {
-            printf("RoutingTable Updated.\n");
+            //printf("RoutingTable Updated.\n");
             output[0] = 0x45;
             output[1] = 0x00;
             output[4] = 0x00;
@@ -443,14 +443,14 @@ int main(int argc, char *argv[]) {
                 macaddr_t group_mac;
                 if (HAL_ArpGetMacAddress(i, BROADCAST_ADDR, group_mac) == 0)
                 {
-                  HAL_SendIPPacket(i, output, rip_len + 20 + 8, group_mac);
+                  //HAL_SendIPPacket(i, output, rip_len + 20 + 8, group_mac);
                   //printf("update response!!!\n");
                 }
                 else
                   printf("WRONG! DST_MAC NOT FOUND!");
             } // end for N_IFACE_ON_BOARD
           } // end if flag
-            printRouterTable();
+            //printRouterTable();
         }
       }
     } else {
